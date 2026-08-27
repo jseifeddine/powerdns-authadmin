@@ -34,6 +34,7 @@ import {
   typesForZone,
   type RRValidationResult,
 } from "@/lib/validators/rr-types";
+import { protectedRRsetPermission } from "@/lib/rbac/protected-rrsets";
 import { BareDiff, computeBindDiff } from "./bare-diff";
 import { NumberInput } from "./number-input";
 import { RRContentField } from "@/components/domain/rr-editors";
@@ -73,6 +74,14 @@ interface EditableRecordTableProps {
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  /**
+   * `record.update.apex-ns`. The apex NS RRset is the zone's delegation,
+   * so it costs a permission of its own on top of the record ones (#119).
+   * Without it those rows render locked and the editor refuses to stage a
+   * change touching them - the RRset route enforces the same rule, this
+   * just stops the operator finding out via a 403.
+   */
+  canUpdateApexNs: boolean;
   /** Live ENABLE-LUA-RECORDS=1 state for this zone. */
   luaRecordsEnabled: boolean;
 }
@@ -160,6 +169,15 @@ export function EditableRecordTable(props: EditableRecordTableProps) {
 
   const showActions = props.canUpdate || props.canDelete;
 
+  /**
+   * True when this row is an apex NS the actor may not touch. Uses the
+   * same classifier the RRset route does, so the lock and the 403 can't
+   * drift apart.
+   */
+  const isLockedRow = (row: { name: string; type: string }): boolean =>
+    !props.canUpdateApexNs &&
+    protectedRRsetPermission(row.name, row.type, props.zoneName) === "record.update.apex-ns";
+
   const columns = useMemo<Array<ColumnDef<RecordRow, unknown>>>(() => {
     const base: Array<ColumnDef<RecordRow, unknown>> = [
       {
@@ -227,6 +245,16 @@ export function EditableRecordTable(props: EditableRecordTableProps) {
         meta: { className: "w-[14%] text-right" },
         cell: (ctx) => {
           const row = ctx.row.original;
+          if (isLockedRow(row)) {
+            return (
+              <span
+                className="text-xs text-[color:var(--color-fg-subtle)]"
+                title="The apex NS records are this zone's delegation. Editing them needs record.update.apex-ns."
+              >
+                Delegation - locked
+              </span>
+            );
+          }
           return (
             <span className="text-xs">
               {props.canUpdate ? (
@@ -261,7 +289,7 @@ export function EditableRecordTable(props: EditableRecordTableProps) {
     // `nonSoaRef.current`, see below), so rebuilding the column defs when they
     // change would be churn without correctness benefit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.canUpdate, props.canDelete, props.zoneName, showActions]);
+  }, [props.canUpdate, props.canDelete, props.canUpdateApexNs, props.zoneName, showActions]);
 
   // ===== Editor handlers =====================================================
 
@@ -284,6 +312,7 @@ export function EditableRecordTable(props: EditableRecordTableProps) {
   }
 
   function openEdit(row: RecordRow) {
+    if (isLockedRow(row)) return;
     setEditorError(null);
     setOverrideErrors(false);
     setEditor({
@@ -303,6 +332,7 @@ export function EditableRecordTable(props: EditableRecordTableProps) {
   }
 
   async function handleDeleteRow(row: RecordRow) {
+    if (isLockedRow(row)) return;
     const ok = await confirm({
       title: "Delete this record?",
       description: `Removes ${row.type} value "${row.value}" from ${displayName(row.name, props.zoneName) || "@"}. Other ${row.type} records on this name (if any) stay.`,
@@ -417,6 +447,17 @@ export function EditableRecordTable(props: EditableRecordTableProps) {
 
     if (changes.length === 0) {
       setEditorError("Nothing to change.");
+      return;
+    }
+
+    // A rename can move a record ONTO the apex NS RRset (or off it), so
+    // check the changes the edit actually produces rather than the form's
+    // target alone. The RRset route rejects the same set - this just says
+    // so before the operator has staged a diff.
+    if (changes.some((c) => isLockedRow(c))) {
+      setEditorError(
+        "The apex NS records are this zone's delegation and need the record.update.apex-ns permission.",
+      );
       return;
     }
 

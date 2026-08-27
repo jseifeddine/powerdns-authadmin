@@ -38,6 +38,7 @@ import type { Permission } from "./permissions";
 export type SubjectType =
   | "Zone"
   | "Record"
+  | "Soa"
   | "Dnssec"
   | "Metadata"
   | "Tsig"

@@ -17,6 +17,19 @@ interface ZoneTabsProps {
   serverSlug: string;
   canReadDnssec: boolean;
   canReadMetadata: boolean;
+  /**
+   * Gates the SOA tab (`soa.read`). The SOA carries the zone's authority
+   * and its transfer timers, so a self-service editor can be given the
+   * records without ever being shown it (#119).
+   */
+  canReadSoa: boolean;
+  /**
+   * Gates the Zone settings tab - `zone.settings.read`, or `zone.delete`
+   * for the Danger Zone that shares the tab. Same reasoning as the SOA
+   * tab: record editing must not imply seeing the zone's kind, masters
+   * or SOA-EDIT-API.
+   */
+  showSettings: boolean;
   canReadAudit: boolean;
   /**
    * Gates the Access tab. The tab lists roles + teams + users that
@@ -39,6 +52,8 @@ export function ZoneTabs({
   serverSlug,
   canReadDnssec,
   canReadMetadata,
+  canReadSoa,
+  showSettings,
   canReadAudit,
   canReadAccess,
   showPollingFeatures,
@@ -67,12 +82,16 @@ export function ZoneTabs({
         <TabLink href={detailHref} active={active === "records"}>
           Records
         </TabLink>
-        <TabLink href={soaHref} active={active === "soa"}>
-          SOA
-        </TabLink>
-        <TabLink href={settingsHref} active={active === "settings"}>
-          Zone settings
-        </TabLink>
+        {canReadSoa ? (
+          <TabLink href={soaHref} active={active === "soa"}>
+            SOA
+          </TabLink>
+        ) : null}
+        {showSettings ? (
+          <TabLink href={settingsHref} active={active === "settings"}>
+            Zone settings
+          </TabLink>
+        ) : null}
         {canReadDnssec ? (
           <TabLink href={dnssecHref} active={active === "dnssec"}>
             DNSSEC

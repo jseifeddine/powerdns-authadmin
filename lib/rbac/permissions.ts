@@ -30,12 +30,38 @@ export const PERMISSIONS = [
   "zone.delete",
   "zone.export",
   "zone.import",
+  // Read-only view of the Zone settings tab (kind, masters, SOA-EDIT,
+  // SOA-EDIT-API, API-RECTIFY, horizon). Held separately from
+  // `zone.update` so a role can be given record editing without ever
+  // seeing - let alone changing - the knobs that decide the zone's
+  // authority and how it transfers. Without it the tab is not rendered
+  // and `?tab=settings` falls back to Records.
+  "zone.settings.read",
 
   // === Records ===
   "record.read",
   "record.create",
   "record.update",
   "record.delete",
+  // ADDITIONAL permission, required on top of the matching
+  // `record.create/update/delete`, to write an NS RRset at the zone
+  // apex. Apex NS is the zone's delegation: an operator who removes or
+  // repoints it takes the zone off the internet as surely as a bad SOA
+  // does, so a self-service editor gets the record permissions without
+  // this one. NS records BELOW the apex (child delegations) are
+  // ordinary records and need only `record.*`. ADR-0023 covers why this one
+  // is additive while `soa.update` replaces the record permission.
+  "record.update.apex-ns",
+
+  // === SOA ===
+  // The SOA RRset is its own resource, not a `record.*` action (ADR-0023): it
+  // carries the zone's authority and transfer timers, has a dedicated
+  // editor tab, and is the one RRset a zone cannot exist without.
+  // `soa.read` gates the SOA tab; `soa.update` gates every write to
+  // the SOA RRset, whether it arrives from the SOA panel or a
+  // hand-rolled PATCH.
+  "soa.read",
+  "soa.update",
 
   // === DNSSEC ===
   "dnssec.read",

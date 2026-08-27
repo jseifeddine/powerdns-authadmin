@@ -43,6 +43,7 @@ durability, not exhaustiveness.
 | 0020 | [LDAP authentication architecture](./0020-ldap-architecture.md)                                                  | Accepted                   |
 | 0021 | [SAML 2.0 service-provider architecture](./0021-saml-architecture.md)                                            | Accepted                   |
 | 0022 | [Zone horizons: app-side split-horizon classification](./0022-zone-horizons.md)                                  | Accepted                   |
+| 0023 | [Zone authority is a separate permission from zone records](./0023-zone-authority-permissions.md)                | Accepted                   |
 
 > **Numbering note:** there is no ADR 0003 - that number was reserved for a decision that was
 > withdrawn before it was written. The gap is intentional; numbers are never reused.

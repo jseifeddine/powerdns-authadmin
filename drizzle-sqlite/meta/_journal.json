@@ -50,6 +50,13 @@
       "when": 1786133283567,
       "tag": "0006_petite_the_santerians",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1787788309672,
+      "tag": "0007_granular_zone_permissions_backfill",
+      "breakpoints": true
     }
   ]
 }

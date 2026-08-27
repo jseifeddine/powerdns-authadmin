@@ -15,13 +15,13 @@ Seeded on first boot and protected from deletion. Each builds on the previous -
 the description shown here is the one seeded into the `roles.description`
 column, surfaced verbatim on the Roles list and detail pages.
 
-| Role            | Seeded description                                                                          | Permissions, in addition to the role above…                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Read Only**   | View access to assigned zones. No changes. Useful for auditors and observers.               | View zones, records, DNSSEC, metadata, teams, users, roles, servers, settings; use templates; manage own API tokens (read). |
-| **Zone Editor** | Edit records on assigned zones. Cannot create or delete zones.                              | Create/update/delete **records**; create/delete own API tokens.                                                             |
-| **Operator**    | Day-to-day zone and record administration within a team. No DNSSEC or member management.    | Create/update/delete/import/export **zones**; write metadata; manage templates.                                             |
-| **Team Owner**  | Full control of a team's zones and members. Cannot manage other teams or app-wide settings. | Configure DNSSEC; manage TSIG + autoprimaries; update team + manage members.                                                |
-| **Super Admin** | Full access to everything: users, roles, servers, settings, audit.                          | Everything: users, roles, teams, servers, settings, audit, OIDC, all API tokens.                                            |
+| Role            | Seeded description                                                                                     | Permissions, in addition to the role above…                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| **Read Only**   | View access to assigned zones. No changes. Useful for auditors and observers.                          | View zones, records, DNSSEC, metadata, teams, users, roles, servers, settings; use templates; manage own API tokens (read). |
+| **Zone Editor** | Edit records on assigned zones. Cannot create or delete zones, change the SOA, or repoint the apex NS. | Create/update/delete **records**; create/delete own API tokens.                                                             |
+| **Operator**    | Day-to-day zone and record administration within a team. No DNSSEC or member management.               | Update the **SOA** + **apex NS**; create/update/delete/import/export **zones**; write metadata; manage templates.           |
+| **Team Owner**  | Full control of a team's zones and members. Cannot manage other teams or app-wide settings.            | Configure DNSSEC; manage TSIG + autoprimaries; update team + manage members.                                                |
+| **Super Admin** | Full access to everything: users, roles, servers, settings, audit.                                     | Everything: users, roles, teams, servers, settings, audit, OIDC, all API tokens.                                            |
 
 The seed asserts Super Admin contains every permission, so a new permission added
 to the codebase is always held by Super Admin. The seeded descriptions are owned
@@ -35,22 +35,69 @@ naturally as "what does this role do?" context for newer operators.
 
 Custom roles are built from these. Names are stable strings (`resource.action`):
 
-| Group            | Permissions                                                                                |
-| ---------------- | ------------------------------------------------------------------------------------------ |
-| Zones            | `zone.read` `zone.create` `zone.update` `zone.delete` `zone.export` `zone.import`          |
-| Records          | `record.read` `record.create` `record.update` `record.delete`                              |
-| DNSSEC           | `dnssec.read` `dnssec.configure`                                                           |
-| Metadata         | `metadata.read` `metadata.write`                                                           |
-| TSIG             | `tsig.read` (list) · `tsig.manage` (create/regenerate/reveal)                              |
-| Autoprimary      | `autoprimary.manage`                                                                       |
-| Templates        | `template.use` `template.manage`                                                           |
-| Users            | `user.read` `user.create` `user.update` `user.delete` `user.disable` `user.reset-password` |
-| Teams            | `team.read` `team.create` `team.update` `team.delete` `team.manage-members`                |
-| Roles            | `role.read` `role.create` `role.update` `role.delete` `role.assign`                        |
-| Servers          | `server.read` `server.create` `server.update` `server.delete`                              |
-| API tokens       | `token.read.own` `token.create.own` `token.delete.own` `token.read.all` `token.delete.all` |
-| Audit & settings | `audit.read` `settings.read` `settings.write`                                              |
-| OIDC             | `oidc.read` `oidc.manage`                                                                  |
+| Group            | Permissions                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| Zones            | `zone.read` `zone.create` `zone.update` `zone.delete` `zone.export` `zone.import` `zone.settings.read` |
+| Records          | `record.read` `record.create` `record.update` `record.delete` `record.update.apex-ns`                  |
+| SOA              | `soa.read` (see the SOA tab) · `soa.update` (edit it)                                                  |
+| DNSSEC           | `dnssec.read` `dnssec.configure`                                                                       |
+| Metadata         | `metadata.read` `metadata.write`                                                                       |
+| TSIG             | `tsig.read` (list) · `tsig.manage` (create/regenerate/reveal)                                          |
+| Autoprimary      | `autoprimary.manage`                                                                                   |
+| Templates        | `template.use` `template.manage`                                                                       |
+| Users            | `user.read` `user.create` `user.update` `user.delete` `user.disable` `user.reset-password`             |
+| Teams            | `team.read` `team.create` `team.update` `team.delete` `team.manage-members`                            |
+| Roles            | `role.read` `role.create` `role.update` `role.delete` `role.assign`                                    |
+| Servers          | `server.read` `server.create` `server.update` `server.delete`                                          |
+| API tokens       | `token.read.own` `token.create.own` `token.delete.own` `token.read.all` `token.delete.all`             |
+| Audit & settings | `audit.read` `settings.read` `settings.write`                                                          |
+| Auth providers   | `auth.read` `auth.manage` (OIDC, SAML, LDAP)                                                           |
+| System           | `system.backup`                                                                                        |
+
+## Splitting record editing from a zone's authority
+
+Three surfaces decide whether a zone works at all, and each answers to its own
+permission rather than riding along with `record.update`. This is what lets you
+hand someone their zone's records without handing them the zone.
+
+| Surface                                                             | Read                 | Write                                       |
+| ------------------------------------------------------------------- | -------------------- | ------------------------------------------- |
+| **SOA tab** - primary NS, responsible mailbox, refresh/retry/expire | `soa.read`           | `soa.update`                                |
+| **Apex NS records** - the zone's delegation                         | `record.read`        | `record.*` **plus** `record.update.apex-ns` |
+| **Zone settings tab** - kind, masters, SOA-EDIT(-API), API-RECTIFY  | `zone.settings.read` | `zone.update`                               |
+
+Notes worth knowing:
+
+- **Tabs disappear, they don't grey out.** Without `soa.read` there is no SOA
+  tab; without `zone.settings.read` there is no Zone settings tab, and a direct
+  `?tab=soa` / `?tab=settings` link falls back to Records. (A user holding
+  `zone.delete` still gets the settings tab, because the Danger Zone lives
+  there - the settings panel itself stays hidden.)
+- **`soa.update` replaces the record permission, it doesn't add to it.** The SOA
+  is its own resource: `soa.update` alone is enough to edit it, and no amount of
+  `record.*` substitutes for it. `record.update.apex-ns` works the other way -
+  it is an _extra_ requirement layered on top of the matching `record.create` /
+  `record.update` / `record.delete`.
+- **NS below the apex is an ordinary record.** A child delegation
+  (`sub.example.com. NS`) is content this zone serves, so `record.*` covers it.
+  Only the apex NS is protected.
+- **The gate is server-side.** Every write lands on the same RRset route
+  whichever panel sent it, and the route classifies each change by its
+  normalized name - a hand-rolled `PATCH` gets the same answer the UI does.
+- **These work as per-zone grants too**, so you can allow `soa.update` on one
+  customer's zone without granting it fleet-wide.
+
+[ADR-0023](./adr/0023-zone-authority-permissions.md) records why the SOA is
+modelled as its own resource while the apex NS stays a record with an extra
+cost, and what was rejected on the way there.
+
+A self-service role for a hosting customer therefore looks like:
+
+```yaml
+permissions: [zone.read, record.read, record.create, record.update, record.delete, dnssec.read]
+```
+
+Records: yes. SOA, apex NS, zone settings: not shown, not writable.
 
 ## Scopes
 
