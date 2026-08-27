@@ -37,6 +37,60 @@ half-migrated schema; fix the cause and restart.
 
 ## Version-specific notes
 
+### Upgrading to 1.5.6 (from 1.5.5)
+
+**No schema change**, but there IS a migration -
+`0007_granular_zone_permissions_backfill` is data-only: it rewrites permission
+lists, adds no tables and no columns. Pull and recreate:
+
+```sh
+docker compose pull
+docker compose up -d
+docker compose logs app | grep migrate   # expect 0007_… in the applied list
+```
+
+**What changed.** Editing a zone's records and editing the zone itself are no
+longer the same permission. `soa.read` / `soa.update` gate the SOA tab,
+`zone.settings.read` gates the Zone settings tab (writing it stays
+`zone.update`), and `record.update.apex-ns` is now required - on top of the
+matching `record.*` - to write the zone's apex NS. Missing a read permission
+hides the tab outright. See
+[RBAC → Splitting record editing from a zone's authority](./07-RBAC.md#splitting-record-editing-from-a-zones-authority).
+
+**Your own roles keep working.** The migration backfills every operator-defined
+role, zone grant and API token that held the permission which used to imply the
+new one:
+
+| Held before          | Gains                            |
+| -------------------- | -------------------------------- |
+| `zone.read`          | `soa.read`, `zone.settings.read` |
+| `record.update`      | `soa.update`                     |
+| any `record.*` write | `record.update.apex-ns`          |
+
+An API token with an EMPTY scope list is untouched - empty already means
+"everything the user currently holds". Nothing you have configured loses access
+on upgrade; tightening a role is now an edit you make deliberately, by
+unticking `soa.update` (and `record.update.apex-ns`, and `zone.settings.read`)
+on it.
+
+**The seeded system roles DO change**, because they are re-upserted from
+`lib/rbac/default-roles.ts` on every boot:
+
+- **Zone Editor** loses `soa.update` and `record.update.apex-ns`. It keeps
+  `soa.read` and `zone.settings.read`, so both tabs stay visible, read-only.
+  This is the role to assign a hosting customer.
+- **Operator** and above gain both, alongside the `zone.update` they already
+  held.
+
+If you rely on Zone Editor being able to rewrite the SOA, copy it to a custom
+role with `soa.update` ticked and reassign - system-role permissions can't be
+edited in place by design.
+
+**Rolling back.** 1.5.5 has the same schema, so a downgrade is a straight image
+swap. The backfilled permissions simply become strings 1.5.5 doesn't recognise
+(the ability builder logs and skips unknown names), and the old implicit
+behaviour returns.
+
 ### Upgrading to 1.5.5 (from 1.5.4)
 
 **No schema change** - nothing to watch in the boot log beyond the usual

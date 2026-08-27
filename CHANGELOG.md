@@ -6,6 +6,85 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.5.6] - 2026-08-27
+
+Feature release. **No schema change** - the upgrade is a pull-and-recreate. It
+ships one data-only migration that backfills permission lists; there is no DDL
+and no downtime beyond the container restart.
+
+Editing a zone's records and editing the zone itself used to be the same
+permission. A role built for a hosting customer - `record.create` /
+`record.update` / `record.delete` on their own zone - could also rewrite the
+SOA and was shown the Zone settings tab, which is where SOA-EDIT-API, the zone
+kind and the masters list live. There was no way to hand someone their records
+without handing them the zone's authority (#119).
+
+### Added - the SOA, the apex NS and zone settings are their own permissions
+
+Four permissions split those surfaces out of `zone.read` / `record.update`:
+
+| Permission              | Gates                                                                   |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `soa.read`              | The **SOA** tab. Without it the tab is not rendered.                    |
+| `soa.update`            | Every write to the SOA RRset, whatever sent it.                         |
+| `zone.settings.read`    | The **Zone settings** tab (kind, masters, SOA-EDIT(-API), API-RECTIFY). |
+| `record.update.apex-ns` | Writing the zone's **apex NS** - its delegation.                        |
+
+Three things are worth knowing about how they compose:
+
+- **`soa.update` replaces the record permission rather than adding to it.** The
+  SOA is modelled as its own resource, so `soa.update` alone edits it and no
+  amount of `record.*` substitutes for it. `record.update.apex-ns` is the
+  opposite - an _extra_ requirement layered on top of the matching
+  `record.create` / `record.update` / `record.delete`, since an apex NS write is
+  still a record write.
+- **NS below the apex stays an ordinary record.** A child delegation is content
+  the zone serves, not the zone's own standing, so `record.*` covers it.
+- **A missing read permission removes the tab, not just its Save button.** A
+  direct `?tab=soa` or `?tab=settings` link falls back to Records. (Holding
+  `zone.delete` still surfaces the settings tab, because the Danger Zone lives
+  there; the settings panel itself stays hidden.)
+
+Enforcement is server-side, in the RRset route, against each change's
+normalized name - so the SOA panel, the record editor and a hand-rolled `PATCH`
+all get the same answer. In the editor the apex NS rows render as
+`Delegation - locked` and a rename that would move a record onto them is
+refused before it can be staged. All four permissions are grantable per-zone,
+so `soa.update` can be opened on one customer's zone without going fleet-wide.
+
+[ADR-0023](./docs/adr/0023-zone-authority-permissions.md) records why the SOA is
+modelled as its own resource while the apex NS stays a record with an extra
+cost, and what was rejected on the way there.
+
+Thanks to [@vducros-neyrial](https://github.com/vducros-neyrial) for the
+report and the concrete self-service scenario behind it (#119).
+
+### Fixed - the Zone settings panel answered to `record.update` in the UI
+
+`PUT /api/admin/pdns/zones/{zone}/settings` has always required `zone.update`,
+but the page enabled the panel's inputs on `record.update` for any non-mirror
+zone. A record editor got a fully interactive settings form whose Save then
+failed with a 403. The panel now reads `zone.update` on every zone kind, which
+is also what makes the settings tab meaningful to hide.
+
+### Changed - Zone Editor no longer edits the SOA or the apex NS
+
+The seeded **Zone Editor** role is the one you hand to someone who manages
+records in a zone they don't own, so it gets `soa.read` and
+`zone.settings.read` (it still _sees_ both surfaces) but neither `soa.update`
+nor `record.update.apex-ns`. Those move to **Operator** and above, alongside
+the `zone.update` that role already held. **Read Only** gains both read
+permissions and no writes. System roles are re-seeded on every boot, so this
+applies the moment you upgrade.
+
+**Custom roles, zone grants and API tokens are backfilled instead**, by
+migration `0007_granular_zone_permissions_backfill`: anything that held
+`zone.read` gains `soa.read` + `zone.settings.read`, anything that held
+`record.update` gains `soa.update`, and anything that held any `record.*` write
+gains `record.update.apex-ns`. An upgrade therefore changes nothing about what
+your own roles can do - tightening one is an opt-in edit, and unticking
+`soa.update` is now all it takes.
+
 ## [1.5.5] - 2026-08-12
 
 Bug-fix + dependency-security release. **No schema change** - the upgrade is a
@@ -1500,7 +1579,9 @@ First production release.
 - **Distribution** - multi-arch (`linux/amd64` + `linux/arm64`) image published to Docker Hub as
   `jseifeddine/powerdns-authadmin`, plus a one-command minimal-demo stack.
 
-[Unreleased]: https://github.com/PowerDNS-AuthAdmin/powerdns-authadmin/compare/v1.5.4...HEAD
+[Unreleased]: https://github.com/PowerDNS-AuthAdmin/powerdns-authadmin/compare/v1.5.6...HEAD
+[1.5.6]: https://github.com/PowerDNS-AuthAdmin/powerdns-authadmin/compare/v1.5.5...v1.5.6
+[1.5.5]: https://github.com/PowerDNS-AuthAdmin/powerdns-authadmin/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/PowerDNS-AuthAdmin/powerdns-authadmin/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/PowerDNS-AuthAdmin/powerdns-authadmin/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/PowerDNS-AuthAdmin/powerdns-authadmin/compare/v1.5.1...v1.5.2
