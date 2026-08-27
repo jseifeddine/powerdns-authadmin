@@ -44,6 +44,17 @@ export type ProtectedRRsetPermission = "soa.update" | "record.update.apex-ns";
  * them: lowercased, with exactly one trailing dot. Callers pass names in
  * whatever form the request carried; PowerDNS is case-insensitive here
  * and inconsistent about the trailing dot depending on the endpoint.
+ *
+ * Full `toLowerCase()` rather than an ASCII-only fold (which is all RFC
+ * 4343 defines for DNS) on purpose, for two reasons. It is byte-for-byte
+ * what `normalizeZoneId` and the RRset route's `normalizeName` already
+ * do, so this can never fold LESS than the value it is handed - folding
+ * less is the direction that misses an apex match and lets a write
+ * through. And where Unicode folds more than DNS would (U+212A KELVIN
+ * SIGN onto "k", say), the extra match errs toward "this RRset is
+ * protected", i.e. toward denying a write that did not need the
+ * permission. Names that reach here are punycode for anything non-ASCII
+ * anyway, so neither case is reachable with a real zone.
  */
 function sameName(a: string, b: string): boolean {
   const norm = (s: string): string => {

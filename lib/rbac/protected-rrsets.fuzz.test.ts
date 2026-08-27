@@ -33,6 +33,18 @@ const zoneNameArbitrary = fc.oneof(
  * than about surviving hostile input - `"a\t"` and `"a\t."` differ by a tab
  * before the dot, so they are two different names, not two spellings of one.
  */
+/**
+ * Uppercase A-Z and nothing else. DNS case-insensitivity is defined over
+ * ASCII alone (RFC 4343 § 3), so `String.prototype.toUpperCase` does NOT
+ * produce another spelling of the same name: it maps U+1F54 to a three-
+ * codepoint sequence that lowercases back to a different character, and
+ * U+017F LATIN SMALL LETTER LONG S to "S". Use this where the property is
+ * "these are the same name spelled differently" - a fuzz run caught the
+ * naive version asserting that about two genuinely different names.
+ */
+const asciiUpperCase = (value: string): string =>
+  value.replace(/[a-z]/g, (character) => character.toUpperCase());
+
 const dnsNameArbitrary = fc
   .array(
     fc.stringMatching(/^[a-zA-Z0-9-]{1,20}$/).filter((label) => label.length > 0),
@@ -83,7 +95,7 @@ describe("protectedRRsetPermission - fuzz", () => {
       fc.property(zoneNameArbitrary, fc.constantFrom("NS", "ns", "Ns", " ns "), (zone, type) => {
         // Every spelling `normalizeName` in the RRset route can resolve to the
         // apex must reach the same verdict.
-        for (const apexSpelling of ["@", "", "  ", zone, zone.toUpperCase()]) {
+        for (const apexSpelling of ["@", "", "  ", zone, asciiUpperCase(zone)]) {
           expect(protectedRRsetPermission(apexSpelling, type, zone)).toBe("record.update.apex-ns");
         }
       }),
@@ -108,7 +120,7 @@ describe("protectedRRsetPermission - fuzz", () => {
         // Four spellings of one name, all denoting the same RRset. PowerDNS is
         // case-insensitive here and inconsistent about the trailing dot across
         // endpoints, so all four have to reach the same verdict.
-        const verdicts = [zone, zone.toUpperCase(), bare, bare.toUpperCase()].map((spelling) =>
+        const verdicts = [zone, asciiUpperCase(zone), bare, asciiUpperCase(bare)].map((spelling) =>
           protectedRRsetPermission(spelling, "NS", zone),
         );
         expect(new Set(verdicts)).toEqual(new Set(["record.update.apex-ns"]));
