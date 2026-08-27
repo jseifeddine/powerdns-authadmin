@@ -142,8 +142,8 @@ can jump straight into the code that owns each feature.
 ### 2.1 Permissions vocabulary
 
 - **What.** A typed list of ~60 permission strings spanning every action surface: zones,
-  records, DNSSEC, metadata, TSIG, autoprimaries, templates, users, teams, roles, PDNS
-  servers, API tokens, audit, settings, OIDC providers.
+  records, SOA, DNSSEC, metadata, TSIG, autoprimaries, templates, users, teams, roles, PDNS
+  servers, API tokens, audit, settings, auth providers.
 - **Where.** `lib/rbac/permissions.ts`.
 - **How.** Use a permission in a route via `requireUser({ can: "zone.create" })` or in a page
   component via `requireUserForPage({ can: "zone.create" })`. The CASL ability builder
@@ -164,7 +164,24 @@ can jump straight into the code that owns each feature.
   <img src="../screenshots/light/roles.png" alt="Roles" width="720" />
 </picture>
 
-### 2.3 Scoped assignments
+### 2.3 Zone-authority permissions
+
+- **What.** The SOA, the apex NS RRset, and the zone-settings object are held apart from
+  ordinary record editing, so a role can be given a zone's records without being given the
+  zone. `soa.read` / `soa.update` gate the SOA tab; `record.update.apex-ns` is an extra
+  requirement on top of `record.*` for writing the apex NS; `zone.settings.read` gates the
+  Zone settings tab, whose writes stay on `zone.update`. Missing the read permission removes
+  the tab outright rather than greying it out.
+- **Where.** `lib/rbac/protected-rrsets.ts` (the classifier both sides share),
+  `app/api/admin/pdns/zones/[zoneId]/rrsets/route.ts`,
+  `app/api/admin/pdns/zones/[zoneId]/settings/route.ts`,
+  `app/(app)/zones/[zoneId]/page.tsx`.
+- **How.** The RRset route classifies every change by its normalized name before touching
+  PowerDNS, so any client - the SOA panel, the record editor, or a hand-rolled `PATCH` - gets
+  the same answer. The permissions work as per-zone grants too. See
+  [docs/07-RBAC.md](./07-RBAC.md#splitting-record-editing-from-a-zones-authority).
+
+### 2.4 Scoped assignments
 
 - **What.** Every assignment is `(user, role, scope)` where scope is one of
   `global` / `team:<id>` / `zone:<fqdn>` / `server:<id>`. The CASL builder walks scopes at

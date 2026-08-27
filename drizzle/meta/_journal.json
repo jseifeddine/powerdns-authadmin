@@ -50,6 +50,13 @@
       "when": 1786133253249,
       "tag": "0006_nice_butterfly",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787788306369,
+      "tag": "0007_granular_zone_permissions_backfill",
+      "breakpoints": true
     }
   ]
 }

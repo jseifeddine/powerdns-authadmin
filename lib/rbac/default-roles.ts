@@ -27,7 +27,9 @@ export interface DefaultRoleSpec {
  */
 const READ_ONLY: Permission[] = [
   "zone.read",
+  "zone.settings.read",
   "record.read",
+  "soa.read",
   "dnssec.read",
   "metadata.read",
   "template.use",
@@ -52,6 +54,13 @@ const ZONE_EDITOR: Permission[] = [
 /** Operator - typical day-to-day admin scope within a team. */
 const OPERATOR: Permission[] = [
   ...ZONE_EDITOR,
+  // The two RRsets that decide whether the zone works at all: its SOA
+  // (authority + transfer timers) and its apex NS (delegation). Held
+  // from Operator up, alongside `zone.update`, so the tier that owns
+  // the zone's shape owns these too - Zone Editor edits the records
+  // inside the zone, not the zone's standing in DNS.
+  "soa.update",
+  "record.update.apex-ns",
   "zone.create",
   "zone.update",
   "zone.delete",
@@ -126,7 +135,8 @@ export const DEFAULT_ROLES: readonly DefaultRoleSpec[] = [
   {
     slug: "zone-editor",
     name: "Zone Editor",
-    description: "Edit records on assigned zones. Cannot create or delete zones.",
+    description:
+      "Edit records on assigned zones. Cannot create or delete zones, change the SOA, or repoint the apex NS.",
     permissions: ZONE_EDITOR,
   },
   {

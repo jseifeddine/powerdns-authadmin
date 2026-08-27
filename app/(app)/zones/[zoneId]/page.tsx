@@ -285,9 +285,17 @@ export default async function ZoneDetailPage({ params, searchParams }: PageProps
   const canUpdate = ops.rrsets && zoneCan("record.update");
   const canDelete = ops.rrsets && zoneCan("record.delete");
   const canEdit = canCreate || canUpdate || canDelete;
-  // `masters` (which primaries a mirror pulls from) is editable on a read-only
-  // zone, so the settings panel stays writable there for users with zone.update.
-  const canEditSettings = canUpdate || (isReadOnlyZone && zoneCan("zone.update"));
+  // Apex NS is the zone's delegation, so it costs a permission of its own on
+  // top of the record ones (#119). Rows for it stay visible but locked without
+  // it; the RRset route enforces the same rule.
+  const canUpdateApexNs = ops.rrsets && zoneCan("record.update.apex-ns");
+  // Zone settings (kind, masters, SOA-EDIT*, API-RECTIFY, horizon) are the
+  // knobs that decide the zone's authority and how it transfers - they answer
+  // to `zone.update`, NEVER to `record.update`. `masters` is meaningful on a
+  // read-only mirror too, so the panel stays writable there on the same
+  // permission.
+  const canEditSettings = zoneCan("zone.update");
+  const canReadSettings = zoneCan("zone.settings.read");
   // Zone creation isn't grantable per-zone - it's a global capability.
   const canCreateZone = globalPermissions.has("zone.create");
   const canDeleteZone = zoneCan("zone.delete");
@@ -299,6 +307,12 @@ export default async function ZoneDetailPage({ params, searchParams }: PageProps
   const canReadAccess = globalPermissions.has("user.read");
   const canReadDnssec = zoneCan("dnssec.read");
   const canReadMetadata = zoneCan("metadata.read");
+  const canReadSoa = zoneCan("soa.read");
+  const canEditSoa = ops.rrsets && zoneCan("soa.update");
+  // The Danger Zone (delete this zone) lives on the settings tab, so a
+  // `zone.delete` holder who can't read settings still needs a way in - the
+  // tab renders with the panel omitted.
+  const showSettingsTab = canReadSettings || canDeleteZone;
 
   // Which audience this copy of the zone serves (#121). Cluster zones classify
   // against the cluster, so the answer doesn't change as `choosePeer` rotates.
@@ -359,9 +373,9 @@ export default async function ZoneDetailPage({ params, searchParams }: PageProps
       ? "history"
       : requestedTab === "access" && canReadAccess
         ? "access"
-        : requestedTab === "soa"
+        : requestedTab === "soa" && canReadSoa
           ? "soa"
-          : requestedTab === "settings"
+          : requestedTab === "settings" && showSettingsTab
             ? "settings"
             : requestedTab === "dnssec" && canReadDnssec
               ? "dnssec"
@@ -463,6 +477,8 @@ export default async function ZoneDetailPage({ params, searchParams }: PageProps
           serverSlug={selected.slug}
           canReadDnssec={canReadDnssec}
           canReadMetadata={canReadMetadata}
+          canReadSoa={canReadSoa}
+          showSettings={showSettingsTab}
           canReadAudit={canReadAudit}
           canReadAccess={canReadAccess}
           showPollingFeatures={pdnsBackgroundPollingEnabled}
@@ -497,6 +513,7 @@ export default async function ZoneDetailPage({ params, searchParams }: PageProps
               canCreate={canCreate}
               canUpdate={canUpdate}
               canDelete={canDelete}
+              canUpdateApexNs={canUpdateApexNs}
               luaRecordsEnabled={luaRecordsEnabled}
             />
           ) : (
@@ -523,23 +540,25 @@ export default async function ZoneDetailPage({ params, searchParams }: PageProps
             zoneIdEncoded={encodeURIComponent(zone.id)}
             current={soaFields}
             ttl={soaTtl}
-            canEdit={canUpdate}
+            canEdit={canEditSoa}
           />
         ) : tab === "settings" ? (
           <div className="space-y-6">
-            <ZoneSettingsPanel
-              zoneIdEncoded={encodeURIComponent(zone.id)}
-              serverSlug={selected.slug}
-              initial={{
-                kind: zone.kind,
-                ...(zone.masters !== undefined ? { masters: zone.masters } : {}),
-                ...(zone.soa_edit !== undefined ? { soa_edit: zone.soa_edit } : {}),
-                ...(zone.soa_edit_api !== undefined ? { soa_edit_api: zone.soa_edit_api } : {}),
-                ...(zone.api_rectify !== undefined ? { api_rectify: zone.api_rectify } : {}),
-                horizon: zoneHorizon,
-              }}
-              canEdit={canEditSettings}
-            />
+            {canReadSettings ? (
+              <ZoneSettingsPanel
+                zoneIdEncoded={encodeURIComponent(zone.id)}
+                serverSlug={selected.slug}
+                initial={{
+                  kind: zone.kind,
+                  ...(zone.masters !== undefined ? { masters: zone.masters } : {}),
+                  ...(zone.soa_edit !== undefined ? { soa_edit: zone.soa_edit } : {}),
+                  ...(zone.soa_edit_api !== undefined ? { soa_edit_api: zone.soa_edit_api } : {}),
+                  ...(zone.api_rectify !== undefined ? { api_rectify: zone.api_rectify } : {}),
+                  horizon: zoneHorizon,
+                }}
+                canEdit={canEditSettings}
+              />
+            ) : null}
             <ZoneDangerZone
               zoneIdEncoded={encodeURIComponent(zone.id)}
               serverSlug={selected.slug}

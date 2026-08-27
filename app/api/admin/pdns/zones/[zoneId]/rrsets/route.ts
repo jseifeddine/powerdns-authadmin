@@ -4,7 +4,8 @@
  * PATCH - apply one or more RRset changes to a zone.
  *
  * Flow:
- *   1. Permission check (record.* - discriminated per change kind).
+ *   1. Permission check (record.* - discriminated per change kind; the SOA
+ *      and apex-NS RRsets cost soa.update / record.update.apex-ns, #119).
  *   2. Resolve the backend (by `serverSlug` in the body).
  *   3. Fetch the zone via PdnsClient (current RRsets for the audit snapshot).
  *   4. Build a single PATCH body that bundles every change:
@@ -46,6 +47,7 @@ import { deleteRRset, replaceRRset, zonePatchBody, type RRsetPatch } from "@/lib
 import { detectRRsetConflicts } from "@/lib/pdns/rrset-hash";
 import { PdnsError, PdnsNotFoundError } from "@/lib/pdns/errors";
 import { canActOnZone } from "@/lib/rbac/zone-permissions";
+import { protectedRRsetPermission } from "@/lib/rbac/protected-rrsets";
 import { patchRRsetsSchema } from "@/lib/validators/rrsets";
 
 interface RouteContext {
@@ -99,31 +101,53 @@ export async function PATCH(request: Request, context: RouteContext): Promise<Re
       throw new ValidationError("Unknown or disabled PowerDNS backend.");
     }
 
-    // Permission check, per-change. Each action passes if EITHER:
-    //   - the user holds the permission at GLOBAL scope via a role
-    //     assignment (`globalPermissions.has("record.<perm>")`), OR
+    // Permission check, per-change. Each permission passes if EITHER:
+    //   - the user holds it at GLOBAL scope via a role assignment
+    //     (`globalPermissions.has(...)`), OR
     //   - the user holds a zone_grant for THIS (server, zone) that
-    //     includes the permission (`hasZonePermissionViaGrant`).
-    //
-    // We require:
-    //   - record.update OR record.create for upsert (whichever the
-    //     user has; since we can't know without the current state we
-    //     accept either),
-    //   - record.delete for delete.
-    const hasRecordPerm = (perm: "create" | "update" | "delete"): boolean =>
+    //     includes it (`hasZonePermissionViaGrant`).
+    const hasZonePerm = (permission: string): boolean =>
       canActOnZone({
-        hasGlobalPermission: globalPermissions.has(`record.${perm}`),
+        hasGlobalPermission: globalPermissions.has(permission),
         grants: zoneGrants,
         serverId: server.id,
         zoneName,
-        permission: `record.${perm}`,
+        permission,
       });
-    const needsCreateOrUpdate = input.changes.some((c) => c.kind === "upsert");
-    const needsDelete = input.changes.some((c) => c.kind === "delete");
-    if (needsCreateOrUpdate && !hasRecordPerm("create") && !hasRecordPerm("update")) {
+
+    // Two RRsets cost more than `record.*` (#119): the SOA is its own
+    // resource (`soa.update`, INSTEAD of the record permission - it has
+    // its own editor and its own read gate), and the apex NS carries
+    // the zone's delegation (`record.update.apex-ns`, ADDITIONAL to the
+    // record permission). Classified here rather than at the panel that
+    // happens to send the change, so a hand-rolled PATCH answers to the
+    // same rule the SOA panel does. See lib/rbac/protected-rrsets.ts.
+    //
+    // Classify against the SAME normalized name the patch will carry, so
+    // a relative or `@` spelling can't land somewhere the check didn't
+    // look.
+    const classified = input.changes.map((change) => ({
+      kind: change.kind,
+      extra: protectedRRsetPermission(normalizeName(change.name, zoneName), change.type, zoneName),
+    }));
+
+    for (const { extra } of classified) {
+      if (extra !== null && !hasZonePerm(extra)) {
+        throw new ForbiddenError(`Missing ${extra} for this zone.`);
+      }
+    }
+
+    // `soa.update` REPLACES the record permission; every other change,
+    // apex NS included, still needs its `record.*` one.
+    const ordinary = classified.filter((c) => c.extra !== "soa.update");
+    const needsCreateOrUpdate = ordinary.some((c) => c.kind === "upsert");
+    const needsDelete = ordinary.some((c) => c.kind === "delete");
+    // For an upsert we accept create OR update: without the zone's
+    // current state we can't tell which one the change turns out to be.
+    if (needsCreateOrUpdate && !hasZonePerm("record.create") && !hasZonePerm("record.update")) {
       throw new ForbiddenError("Missing record.create or record.update.");
     }
-    if (needsDelete && !hasRecordPerm("delete")) {
+    if (needsDelete && !hasZonePerm("record.delete")) {
       throw new ForbiddenError("Missing record.delete.");
     }
 

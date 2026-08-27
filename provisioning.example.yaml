@@ -112,8 +112,16 @@ settings:
 # logs + skips them). The full vocabulary, grouped:
 #
 #   Zones:        zone.read, zone.create, zone.update, zone.delete,
-#                 zone.export, zone.import
-#   Records:      record.read, record.create, record.update, record.delete
+#                 zone.export, zone.import,
+#                 zone.settings.read  (see the Zone settings tab; writing it
+#                                       is zone.update)
+#   Records:      record.read, record.create, record.update, record.delete,
+#                 record.update.apex-ns  (EXTRA, on top of the matching
+#                                          record.* one, to write the apex NS -
+#                                          the zone's delegation. NS below the
+#                                          apex is an ordinary record.)
+#   SOA:          soa.read (see the SOA tab), soa.update (edit it - this
+#                 REPLACES the record.* requirement, it is not additive)
 #   DNSSEC:       dnssec.read, dnssec.configure
 #   Metadata:     metadata.read, metadata.write
 #   TSIG keys:    tsig.read, tsig.manage     (tsig.read = list-only; manage
@@ -130,7 +138,12 @@ settings:
 #   API tokens:   token.read.own, token.create.own, token.delete.own,
 #                 token.read.all, token.delete.all
 #   Audit/settings: audit.read, settings.read, settings.write
-#   OIDC IdPs:    oidc.read, oidc.manage
+#   Auth IdPs:    auth.read, auth.manage   (OIDC, SAML, LDAP)
+#   System:       system.backup
+#
+# Leaving soa.read / zone.settings.read off a role HIDES those tabs entirely -
+# which is how you give a hosting customer their records without giving them
+# the zone's authority. See docs/07-RBAC.md.
 # -----------------------------------------------------------------------------
 roles:
   - slug: zone-noc # lowercase kebab-case

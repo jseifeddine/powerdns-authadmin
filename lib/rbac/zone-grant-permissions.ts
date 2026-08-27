@@ -14,5 +14,5 @@
 import { PERMISSIONS } from "./permissions";
 
 export const ZONE_GRANT_PERMISSIONS: readonly string[] = PERMISSIONS.filter((p) =>
-  /^(zone|record|dnssec|metadata|tsig)\./.test(p),
+  /^(zone|record|soa|dnssec|metadata|tsig)\./.test(p),
 );
