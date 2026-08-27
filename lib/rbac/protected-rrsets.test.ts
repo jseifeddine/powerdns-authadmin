@@ -1,7 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { isZoneApex, protectedRRsetPermission } from "./protected-rrsets";
+import { PERMISSIONS } from "./permissions";
+import {
+  isZoneApex,
+  protectedRRsetPermission,
+  type ProtectedRRsetPermission,
+} from "./protected-rrsets";
 
 const ZONE = "example.com.";
+
+/**
+ * Every member of `ProtectedRRsetPermission`. Typing it as a `Record` over the
+ * union makes it exhaustive - adding a third protected RRset stops this file
+ * compiling until it is listed here, and named in the assertion below.
+ */
+const EVERY_PROTECTED_PERMISSION: Record<ProtectedRRsetPermission, true> = {
+  "soa.update": true,
+  "record.update.apex-ns": true,
+};
+
+describe("the permissions the classifier names", () => {
+  it("all exist in the master vocabulary", () => {
+    // The classifier declares them as string literals rather than importing
+    // `Permission`, so it can stay free of `server-only` and be shared with the
+    // record editor (a client component). This is what keeps those literals
+    // honest: rename one in permissions.ts without touching the classifier and
+    // it would demand a permission no role can ever hold - denying silently
+    // instead of failing loudly.
+    for (const permission of Object.keys(EVERY_PROTECTED_PERMISSION)) {
+      expect(PERMISSIONS).toContain(permission);
+    }
+  });
+});
 
 describe("isZoneApex", () => {
   it("treats @, empty and the zone name itself as the apex", () => {

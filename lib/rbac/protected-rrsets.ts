@@ -22,6 +22,10 @@
  *
  * NS *below* the apex is an ordinary record - a child delegation is
  * content, not this zone's own authority - so it needs only `record.*`.
+ *
+ * ADR-0023 records why the SOA is modelled as its own resource (so
+ * `soa.update` REPLACES the record permission) while the apex NS stays a
+ * record with an extra cost (`record.update.apex-ns` is ADDITIVE).
  */
 
 /**

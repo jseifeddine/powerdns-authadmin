@@ -106,7 +106,7 @@ export async function PATCH(request: Request, context: RouteContext): Promise<Re
     //     (`globalPermissions.has(...)`), OR
     //   - the user holds a zone_grant for THIS (server, zone) that
     //     includes it (`hasZonePermissionViaGrant`).
-    const hasZonePerm = (permission: string): boolean =>
+    const hasZonePermission = (permission: string): boolean =>
       canActOnZone({
         hasGlobalPermission: globalPermissions.has(permission),
         grants: zoneGrants,
@@ -132,7 +132,7 @@ export async function PATCH(request: Request, context: RouteContext): Promise<Re
     }));
 
     for (const { extra } of classified) {
-      if (extra !== null && !hasZonePerm(extra)) {
+      if (extra !== null && !hasZonePermission(extra)) {
         throw new ForbiddenError(`Missing ${extra} for this zone.`);
       }
     }
@@ -144,10 +144,14 @@ export async function PATCH(request: Request, context: RouteContext): Promise<Re
     const needsDelete = ordinary.some((c) => c.kind === "delete");
     // For an upsert we accept create OR update: without the zone's
     // current state we can't tell which one the change turns out to be.
-    if (needsCreateOrUpdate && !hasZonePerm("record.create") && !hasZonePerm("record.update")) {
+    if (
+      needsCreateOrUpdate &&
+      !hasZonePermission("record.create") &&
+      !hasZonePermission("record.update")
+    ) {
       throw new ForbiddenError("Missing record.create or record.update.");
     }
-    if (needsDelete && !hasZonePerm("record.delete")) {
+    if (needsDelete && !hasZonePermission("record.delete")) {
       throw new ForbiddenError("Missing record.delete.");
     }
 

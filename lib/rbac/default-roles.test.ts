@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_ROLES, SUPER_ADMIN_SLUG } from "./default-roles";
 import { PERMISSIONS, type Permission } from "./permissions";
 
-function permsOf(slug: string): Permission[] {
+function permissionsOf(slug: string): Permission[] {
   const role = DEFAULT_ROLES.find((r) => r.slug === slug);
   if (!role) throw new Error(`no seeded role "${slug}"`);
   return role.permissions;
@@ -12,7 +12,7 @@ describe("seeded system roles", () => {
   it("Super Admin holds every permission in the vocabulary", () => {
     // The seed relies on this: a permission added to the codebase must be
     // reachable by someone on the very next boot.
-    const superAdmin = new Set<string>(permsOf(SUPER_ADMIN_SLUG));
+    const superAdmin = new Set<string>(permissionsOf(SUPER_ADMIN_SLUG));
     expect(PERMISSIONS.filter((p) => !superAdmin.has(p))).toEqual([]);
   });
 
@@ -28,7 +28,7 @@ describe("seeded system roles", () => {
   // customer who manages their own records; it must not reach the RRsets
   // and settings that decide the zone's authority.
   describe("Zone Editor is safe to hand to a self-service customer", () => {
-    const zoneEditor = new Set<string>(permsOf("zone-editor"));
+    const zoneEditor = new Set<string>(permissionsOf("zone-editor"));
 
     it("can manage ordinary records", () => {
       expect(zoneEditor.has("record.create")).toBe(true);
@@ -54,14 +54,14 @@ describe("seeded system roles", () => {
   });
 
   it("Operator owns the zone's shape: SOA, apex NS and the zone object", () => {
-    const operator = new Set<string>(permsOf("operator"));
+    const operator = new Set<string>(permissionsOf("operator"));
     expect(operator.has("soa.update")).toBe(true);
     expect(operator.has("record.update.apex-ns")).toBe(true);
     expect(operator.has("zone.update")).toBe(true);
   });
 
   it("Read Only sees every zone surface and writes none of them", () => {
-    const readOnly = new Set<string>(permsOf("read-only"));
+    const readOnly = new Set<string>(permissionsOf("read-only"));
     expect(readOnly.has("soa.read")).toBe(true);
     expect(readOnly.has("zone.settings.read")).toBe(true);
     expect(readOnly.has("soa.update")).toBe(false);

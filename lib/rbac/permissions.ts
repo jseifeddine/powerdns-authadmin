@@ -49,11 +49,12 @@ export const PERMISSIONS = [
   // repoints it takes the zone off the internet as surely as a bad SOA
   // does, so a self-service editor gets the record permissions without
   // this one. NS records BELOW the apex (child delegations) are
-  // ordinary records and need only `record.*`.
+  // ordinary records and need only `record.*`. ADR-0023 covers why this one
+  // is additive while `soa.update` replaces the record permission.
   "record.update.apex-ns",
 
   // === SOA ===
-  // The SOA RRset is its own resource, not a `record.*` action: it
+  // The SOA RRset is its own resource, not a `record.*` action (ADR-0023): it
   // carries the zone's authority and transfer timers, has a dedicated
   // editor tab, and is the one RRset a zone cannot exist without.
   // `soa.read` gates the SOA tab; `soa.update` gates every write to

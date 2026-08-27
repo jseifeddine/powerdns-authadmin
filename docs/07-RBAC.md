@@ -87,6 +87,10 @@ Notes worth knowing:
 - **These work as per-zone grants too**, so you can allow `soa.update` on one
   customer's zone without granting it fleet-wide.
 
+[ADR-0023](./adr/0023-zone-authority-permissions.md) records why the SOA is
+modelled as its own resource while the apex NS stays a record with an extra
+cost, and what was rejected on the way there.
+
 A self-service role for a hosting customer therefore looks like:
 
 ```yaml
